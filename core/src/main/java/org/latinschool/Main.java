@@ -2,8 +2,8 @@ package org.latinschool;
 
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Camera;
+import com.badlogic.gdx.graphics.Cursor;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
@@ -18,29 +18,39 @@ import java.util.Random;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main extends ApplicationAdapter {
-    public static final World world = new World(new Vector2(0, -9.8f), true);
-    public static final Camera camera = new OrthographicCamera();
 
+    // Global variables
+    public static World world;
+    public static Camera camera;
+    public static Viewport viewport;
+    public static ShapeRenderer shape;
+
+    // Constants
     private static final float WORLD_WIDTH = 10; // Meters
     private static final float WORLD_HEIGHT = 10; // Meters
 
-    private Viewport viewport;
-    private ShapeRenderer shape;
     private ProceduralTerrain pTerrain;
+    private Player player;
     private Box2DDebugRenderer debugRenderer;
 
 
     @Override
     public void create() {
-        initCamera();
+        initGlobals();
         initViewport();
         initTerrain();
         initMisc();
     }
 
-    private void initCamera() {
-        camera.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0);
-        camera.update();
+    private void initGlobals() {
+        // World
+        world = new World(new Vector2(0, -9.8f), true);
+
+        // Camera
+        camera = new OrthographicCamera();
+
+        // Shape
+        shape = new ShapeRenderer();
     }
 
     private void initViewport() {
@@ -53,20 +63,23 @@ public class Main extends ApplicationAdapter {
         pTerrain = new ProceduralTerrain(
             WORLD_HEIGHT / 2,
             15,
-            new Color[]{Color.GREEN, Color.BROWN, Color.GRAY, Color.DARK_GRAY},
-            new float[]{0, 1, 5, 25},
-            new Color[]{Color.GRAY, Color.DARK_GRAY},
-            .5f,
-            0.1f,
-            new Random().nextLong()
+            new Color[]{Color.GREEN, Color.BROWN, Color.GRAY, Color.DARK_GRAY}, // Layers
+            new float[]{0, 1, 5, 25}, // Layer thresholds
+            new Color[]{Color.GRAY, Color.DARK_GRAY}, // Cave layers
+            .5f, // Cave threshold
+            0.1f, // Cave scale
+            new Random().nextLong() // Seed
         );
     }
 
     private void initMisc() {
-        shape = new ShapeRenderer();
+        player = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT * .9f,.225f, .91f, 2.25f);
+        camera.position.set(WORLD_WIDTH / 2,WORLD_HEIGHT * .9f , 0);
+        camera.update();
         debugRenderer = new Box2DDebugRenderer();
     }
 
+    // Main loop
     @Override
     public void render() {
         input();
@@ -75,18 +88,14 @@ public class Main extends ApplicationAdapter {
     }
 
     private void input() {
-        // TEMP INPUT
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
-            float deltaTime = Gdx.graphics.getDeltaTime();
-            camera.position.add(0, -10.0f * deltaTime, 0);
-            camera.update();
-        }
+        player.input(); // Player input
     }
 
     private void logic() {
         viewport.apply();
-        world.step(1 / 60f, 6, 2);
         pTerrain.update();
+        world.step(1 / 60f, 6, 2);
+        player.update();
     }
 
     private void draw() {
@@ -94,7 +103,8 @@ public class Main extends ApplicationAdapter {
         shape.begin(ShapeRenderer.ShapeType.Filled);
 
         drawBackground();
-        pTerrain.draw(shape);
+        pTerrain.draw();
+        player.draw();
 
         shape.end();
 

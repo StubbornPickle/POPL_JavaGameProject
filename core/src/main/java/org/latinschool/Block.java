@@ -1,13 +1,15 @@
 package org.latinschool;
 
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.*;
+import com.badlogic.gdx.physics.box2d.BodyDef;
+import com.badlogic.gdx.physics.box2d.FixtureDef;
+import com.badlogic.gdx.physics.box2d.PolygonShape;
+import com.badlogic.gdx.physics.box2d.Body;
 
 public class Block {
     private final Vector2 position;
-    private float size;
+    private final float size; // Final for now
     private Color color;
     private Body body;
 
@@ -40,15 +42,14 @@ public class Block {
         fixtureDef.restitution = 0.2f; // Slight bounce, if needed
 
         body.createFixture(fixtureDef); // Ignore warning
-
-        // Dispose of the shape to free resources
+        body.setUserData(this);
         shape.dispose();
     }
 
-    public void draw(ShapeRenderer shape) {
-        shape.setColor(color);
+    public void draw() {
+        Main.shape.setColor(color);
         // Draws from top left corner
-        shape.rect(position.x, position.y, size, -size);
+        Main.shape.rect(position.x, position.y, size, -size);
     }
 
     public Vector2 getPosition() {
@@ -60,13 +61,6 @@ public class Block {
         body.setTransform(position.x + size / 2, position.y - size / 2, body.getAngle());
     }
 
-    public float getSize() {
-        return size;
-    }
-
-    public void setSize(float size) {
-        this.size = size;
-    }
 
     public Color getColor() {
         return color;

@@ -1,7 +1,6 @@
 package org.latinschool;
 
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
 
@@ -85,7 +84,7 @@ public class ProceduralTerrain {
     }
 
     // Draws and handles physics on each block in the terrain
-    public void draw(ShapeRenderer shape) {
+    public void draw() {
         for (Block[] row: blocks) {
             for (Block block : row) {
                 if (shouldRender(block)) {
@@ -94,7 +93,7 @@ public class ProceduralTerrain {
                     if (!blockBody.isActive()) { // If not active set to active
                         block.getBody().setActive(true);
                     }
-                    block.draw(shape); // Draw block
+                    block.draw(); // Draw block
                 } else {
                     // Dont draw and deactivate physics body
                     block.getBody().setActive(false);
@@ -105,6 +104,10 @@ public class ProceduralTerrain {
 
     // Check if a block is within a cave
     private boolean shouldRender(Block block) {
+        if (block.getColor().equals(Color.WHITE)) {
+            return false;
+        }
+
         Color blockColor = block.getColor();
 
         // Check if block could be within a cave
@@ -147,11 +150,15 @@ public class ProceduralTerrain {
         float terrainDepth = blocks[blocks.length - 1][0].getPosition().y;
         float nextDepth = terrainDepth - blockSize; // World space
 
-        // Generate data for the next row (top row will hold this data temporarily)
+        // Generate data for the next row, which will be stored in the top row temporarily
         for (Block block : blocks[0]) {
-            block.setPosition(block.getPosition().x, nextDepth); // Set new position
-            Color blockColor = getDepthColor(blocks.length + depth); // Get new color
-            block.setColor(blockColor); // Set new color
+            // Update the position and color of each block
+            float newX = block.getPosition().x;
+            float newY = nextDepth;
+
+            block.setPosition(newX, newY); // Update the block's position in world space
+            Color blockColor = getDepthColor(blocks.length + depth); // Get color based on depth
+            block.setColor(blockColor); // Update the block color
         }
 
         // Store the top row
