@@ -3,127 +3,115 @@ package org.latinschool;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
-import com.badlogic.gdx.graphics.Cursor;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.Box2DDebugRenderer;
 import com.badlogic.gdx.physics.box2d.World;
+import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
-import com.badlogic.gdx.graphics.Color;
 
 import java.util.Random;
 
-
-/** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main extends ApplicationAdapter {
 
-    // Global variables
-    public static World world;
-    public static Camera camera;
-    public static Viewport viewport;
-    public static ShapeRenderer shape;
+    // Global Variables
+    public static Camera mainCamera;
+    public static Viewport gameViewport;
+    public static World physicsWorld;
+    public static ShapeRenderer shapeRenderer;
 
     // Constants
-    private static final float WORLD_WIDTH = 10; // Meters
-    private static final float WORLD_HEIGHT = 10; // Meters
+    private static final float WORLD_WIDTH = 10.0f;
+    private static final float WORLD_HEIGHT = 10.0f;
+    private static final Vector2 GRAVITY = new Vector2(0.0f, -9.8f);
+    private static final Color BACKGROUND_COLOR = new Color(0.15f, 0.15f, 0.2f, 1f);
 
-    private ProceduralTerrain pTerrain;
+    private ProceduralTerrain terrain;
     private Player player;
-    private Box2DDebugRenderer debugRenderer;
-
 
     @Override
     public void create() {
         initGlobals();
-        initViewport();
         initTerrain();
-        initMisc();
+        initPlayer();
     }
 
     private void initGlobals() {
-        // World
-        world = new World(new Vector2(0, -9.8f), true);
+        mainCamera = new OrthographicCamera();
+        mainCamera.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0);
+        mainCamera.update();
 
-        // Camera
-        camera = new OrthographicCamera();
+        gameViewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, mainCamera);
+        gameViewport.apply();
 
-        // Shape
-        shape = new ShapeRenderer();
-    }
-
-    private void initViewport() {
-        viewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, camera);
-        viewport.apply();
-
+        physicsWorld = new World(GRAVITY, true);
+        shapeRenderer = new ShapeRenderer();
     }
 
     private void initTerrain() {
-        pTerrain = new ProceduralTerrain(
+        terrain = new ProceduralTerrain(
             WORLD_HEIGHT / 2,
             15,
-            new Color[]{Color.GREEN, Color.BROWN, Color.GRAY, Color.DARK_GRAY}, // Layers
-            new float[]{0, 1, 5, 25}, // Layer thresholds
-            new Color[]{Color.GRAY, Color.DARK_GRAY}, // Cave layers
-            .5f, // Cave threshold
-            0.1f, // Cave scale
-            new Random().nextLong() // Seed
+            0.025f,
+            new Color[]{Color.GREEN, Color.BROWN, Color.GRAY, Color.DARK_GRAY},
+            new int[]{0, 1, 10, 25},
+            new Color[]{Color.GRAY, Color.DARK_GRAY},
+            0.5f,
+            0.1f,
+            new Random().nextLong()
         );
     }
 
-    private void initMisc() {
-        player = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT * .9f,.225f, .91f, 2.25f);
-        camera.position.set(WORLD_WIDTH / 2,WORLD_HEIGHT * .9f , 0);
-        camera.update();
-        debugRenderer = new Box2DDebugRenderer();
+    private void initPlayer() {
+        player = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT * .9f, .225f, .91f, 2.25f);
     }
 
-    // Main loop
     @Override
     public void render() {
+        gameViewport.apply();
+        physicsWorld.step(Gdx.graphics.getDeltaTime(), 6, 2);
+
         input();
         logic();
         draw();
     }
 
     private void input() {
-        player.input(); // Player input
+        player.input();
     }
 
     private void logic() {
-        viewport.apply();
-        pTerrain.update();
-        world.step(1 / 60f, 6, 2);
+        terrain.update();
         player.update();
     }
 
     private void draw() {
-        shape.setProjectionMatrix(camera.combined);
-        shape.begin(ShapeRenderer.ShapeType.Filled);
+        ScreenUtils.clear(Color.BLACK);
 
-        drawBackground();
-        pTerrain.draw();
+        shapeRenderer.setProjectionMatrix(mainCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        // Viewport background
+        shapeRenderer.setColor(BACKGROUND_COLOR);
+        shapeRenderer.rect(0, mainCamera.position.y - mainCamera.viewportHeight / 2, WORLD_WIDTH, WORLD_HEIGHT);
+
+        terrain.draw();
         player.draw();
 
-        shape.end();
-
-        // debugRenderer.render(world, camera.combined);
-    }
-
-    private void drawBackground() {
-        shape.setColor(0.15f, 0.15f, 0.2f, 1f);
-        float backgroundY = camera.position.y - camera.viewportHeight / 2;
-        shape.rect(0, backgroundY, camera.viewportWidth, camera.viewportHeight);
-    }
-
-    @Override
-    public void dispose() {
-        shape.dispose();
+        shapeRenderer.end();
     }
 
     @Override
     public void resize(int width, int height) {
-        viewport.update(width, height);
+        gameViewport.update(width, height, true);
+    }
+
+    @Override
+    public void dispose() {
+        physicsWorld.dispose();
+        shapeRenderer.dispose();
     }
 }

@@ -2,75 +2,99 @@ package org.latinschool;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.Vector2;
-import com.badlogic.gdx.physics.box2d.BodyDef;
-import com.badlogic.gdx.physics.box2d.FixtureDef;
-import com.badlogic.gdx.physics.box2d.PolygonShape;
 import com.badlogic.gdx.physics.box2d.Body;
+import com.badlogic.gdx.physics.box2d.BodyDef;
 
 public class Block {
-    private final Vector2 position;
-    private final float size; // Final for now
-    private Color color;
-    private Body body;
+    // Block data
+    private final Body body;    // Physics body of the block
+    private final float size;   // Block size in meters
+    private Color color;        // Block color
 
-    public Block(float x, float y, float size, Color color) {
-        this.position = new Vector2(x, y);
+    /**
+     * Constructs a Block at the specified position, with a given size and color.
+     * @param posX X-coordinate of the top-left corner of the block.
+     * @param posY Y-coordinate of the top-left corner of the block.
+     * @param size Size of the block in meters.
+     * @param color Color of the block.
+     */
+    public Block(float posX, float posY, float size, Color color) {
         this.size = size;
         this.color = color;
-
-        createCollider();
+        this.body = createBlockBody(posX, posY, size);
+        this.body.setUserData(this); // Attach this instance to the body’s user data for reference.
     }
 
-    private void createCollider() {
-        // Define a body definition for a static body
-        BodyDef bodyDef = new BodyDef();
-        bodyDef.position.set(position.x + size / 2, position.y - size / 2); // Center the body at the block's position
-        bodyDef.type = BodyDef.BodyType.StaticBody;
+    /**
+     * Draws the block with an optional outline width.
+     * @param outlineWidth Width of the outline around the block.
+     */
+    public void draw(float outlineWidth) {
+        // Set color for block
+        Main.shapeRenderer.setColor(color);
 
-        // Create the body in the Box2D world
-        body = Main.world.createBody(bodyDef);
+        // Calculate position with outline
+        Vector2 position = getPosition();
+        float x = position.x + outlineWidth;
+        float y = position.y + outlineWidth;
 
-        // Define a shape for the fixture
-        PolygonShape shape = new PolygonShape();
-        shape.setAsBox(size / 2, size / 2); // Set the size of the box shape
-
-        // Create a fixture definition and attach it to the body
-        FixtureDef fixtureDef = new FixtureDef();
-        fixtureDef.shape = shape;
-        fixtureDef.density = 0f; // Density is irrelevant for static bodies
-        fixtureDef.friction = 0.5f;
-        fixtureDef.restitution = 0.2f; // Slight bounce, if needed
-
-        body.createFixture(fixtureDef); // Ignore warning
-        body.setUserData(this);
-        shape.dispose();
+        // Draw block rectangle with specified outline
+        Main.shapeRenderer.rect(x, y, size - outlineWidth * 2, -size + outlineWidth * 2);
     }
 
-    public void draw() {
-        Main.shape.setColor(color);
-        // Draws from top left corner
-        Main.shape.rect(position.x, position.y, size, -size);
+    /**
+     * Retrieves the physics body of the block.
+     * @return The physics body.
+     */
+    public Body getBody() {
+        return body;
     }
 
+    /**
+     * Returns the position of the block's top-left corner in world coordinates.
+     * @return The top-left position of the block.
+     */
     public Vector2 getPosition() {
-        return position;
+        return body.getPosition().add(-size / 2, size / 2);
     }
 
-    public void setPosition(float x, float y) {
-        position.set(x, y);
-        body.setTransform(position.x + size / 2, position.y - size / 2, body.getAngle());
+    /**
+     * Sets the position of the block's top-left corner in world coordinates.
+     * @param posX X-coordinate of the top-left corner.
+     * @param posY Y-coordinate of the top-left corner.
+     */
+    public void setPosition(float posX, float posY) {
+        body.setTransform(posX + size / 2, posY - size / 2, body.getAngle());
     }
 
-
+    /**
+     * Retrieves the color of the block.
+     * @return The current color of the block.
+     */
     public Color getColor() {
         return color;
     }
 
+    /**
+     * Sets the color of the block.
+     * @param color New color for the block.
+     */
     public void setColor(Color color) {
         this.color = color;
     }
 
-    public Body getBody() {
-        return body;
+    /**
+     * Creates a static body for the block in the physics world.
+     * @param posX X-coordinate of the top-left corner.
+     * @param posY Y-coordinate of the top-left corner.
+     * @param size Size of the block in meters.
+     * @return The created physics body.
+     */
+    private Body createBlockBody(float posX, float posY, float size) {
+        return Box2DUtils.createBody(
+            Main.physicsWorld, BodyDef.BodyType.StaticBody,
+            new Vector2(posX + size / 2, posY - size / 2),
+            size, size, 0.0f, 1.0f, 0.2f
+        );
     }
 }
