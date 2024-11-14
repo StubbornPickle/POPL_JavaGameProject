@@ -3,12 +3,15 @@ package org.latinschool;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.Body;
+
+import java.util.Arrays;
+
 import static com.badlogic.gdx.math.MathUtils.ceil;
 
 public class ProceduralTerrain {
-    // Terrain configuration
     private final float blockOutlineWidth;
     private final Color[] layers;
+    private final float[] layerHealths;
     private final int[] layerThresholds;
     private final Color[] caveLayers;
     private final float caveRenderThreshold;
@@ -16,64 +19,56 @@ public class ProceduralTerrain {
     private final long noiseSeed;
     private final float blockSize;
 
-    // Terrain state
     private int depth; // Tracks cumulative number of rows down
     private Block[][] blocks;
 
-    /**
-     * Initializes a ProceduralTerrain with specified properties.
-     * @param startHeight Starting height of the terrain.
-     * @param rowResolution Number of blocks per row.
-     * @param blockOutlineWidth Outline width applied to the blocks
-     * @param layers Array of descending layer colors.
-     * @param layerThresholds Thresholds for layers based on depth in rows.
-     * @param caveLayers Colors representing layers with caves.
-     * @param caveRenderThreshold Noise threshold for caves, between -1 and 1.
-     * @param caveNoiseScale Scale of the noise for cave generation.
-     * @param noiseSeed Seed for noise generation.
-     *
-     */
-    public ProceduralTerrain(float startHeight, int rowResolution, float blockOutlineWidth,
-                             Color[] layers, int[] layerThresholds, Color[] caveLayers,
+    public ProceduralTerrain(float startHeight, int blocksPerRow, float blockOutlineWidth,
+                             Color[] layers, float[] layerHealths, int[] layerThresholds, Color[] caveLayers,
                              float caveRenderThreshold, float caveNoiseScale, long noiseSeed) {
         this.blockOutlineWidth = blockOutlineWidth;
         this.layers = layers;
         this.layerThresholds = layerThresholds;
         this.caveLayers = caveLayers;
+        this.layerHealths = layerHealths;
         this.caveRenderThreshold = caveRenderThreshold;
         this.caveNoiseScale = caveNoiseScale;
         this.noiseSeed = noiseSeed;
-        this.blockSize = Main.mainCamera.viewportWidth / rowResolution;
+        this.blockSize = Main.mainCamera.viewportWidth / blocksPerRow;
 
-        initializeBlocks(startHeight, rowResolution);
+        initializeBlocks(startHeight, blocksPerRow);
     }
 
-    /**
-     * Initializes the block grid for the terrain.
-     * @param startHeight Starting height of the terrain.
-     * @param rowResolution Number of blocks per row.
-     */
-    private void initializeBlocks(float startHeight, int rowResolution) {
+    private void initializeBlocks(float startHeight, int blocksPerRow) {
         int rows = ceil(Main.mainCamera.viewportHeight / blockSize) + 1; // +1 to allow for cycling
 
-        blocks = new Block[rows][rowResolution];
+        blocks = new Block[rows][blocksPerRow];
         for (int row = 0; row < rows; row++) {
-            for (int col = 0; col < rowResolution; col++) {
+            for (int col = 0; col < blocksPerRow; col++) {
                 float x = col * blockSize;
                 float y = startHeight - (row * blockSize);
 
-                Block block = new Block(x, y, blockSize, getDepthColor(row));
+                Color color = getDepthColor(row);
+                float health;
+                if (color.equals(Color.YELLOW)) {
+                    health = 50.0f;
+                } else {
+                    health = layerHealths[Arrays.asList(layers).indexOf(color)];
+                }
+                Block block = new Block(x, y, blockSize, color, health);
                 blocks[row][col] = block;
             }
         }
     }
 
-    /**
-     * Determines the color of a block based on its depth.
-     * @param depth Depth of the block in rows.
-     * @return The color of the block.
-     */
     private Color getDepthColor(int depth) {
+        if (depth > layerThresholds[2]) {
+            float maxProbability = 0.025f; // 2.5% max probability
+            if (Math.random() < maxProbability) {
+                return Color.YELLOW; // Gold block color\
+            }
+        }
+
+        // Default color selection logic
         for (int i = 0; i < layers.length; i++) {
             int threshold = layerThresholds[i];
             int nextThreshold = (i + 1 < layerThresholds.length) ? layerThresholds[i + 1] : Integer.MAX_VALUE;
@@ -87,34 +82,27 @@ public class ProceduralTerrain {
                 int transitionDepth = depth - threshold;
                 float probability = (float) transitionDepth / transitionRange;
 
+                // Base layer transition logic
                 return Math.random() < probability ? layers[i] : layers[i - 1];
             }
         }
-        return Color.PURPLE;
+
+        return Color.PURPLE; // Default color if no layer matches
     }
 
-    /**
-     * Updates the terrain, cycling rows if necessary.
-     */
+
     public void update() {
         if (needsCycling()) {
             cycleRows();
         }
     }
 
-    /**
-     * Determines if the terrain rows need to be cycled based on viewport position.
-     * @return True if cycling is necessary, false otherwise.
-     */
     private boolean needsCycling() {
         float topRowY = blocks[0][0].getPosition().y;
         float viewportTop = Main.mainCamera.position.y + Main.mainCamera.viewportHeight / 2;
         return topRowY - blockSize >= viewportTop;
     }
 
-    /**
-     * Moves the top row of terrain blocks to the bottom, adjusting colors and positions.
-     */
     private void cycleRows() {
         depth++;
 
@@ -123,7 +111,16 @@ public class ProceduralTerrain {
 
         for (Block block : blocks[0]) {
             block.setPosition(block.getPosition().x, newY);
-            block.setColor(getDepthColor(blocks.length + depth));
+            Color color = getDepthColor(blocks.length + depth);
+            block.setColor(color);
+            float health;
+            if (color.equals(Color.YELLOW)) {
+                health = 50.0f;
+            } else {
+                health = layerHealths[Arrays.asList(layers).indexOf(color)];
+            }
+            block.setBaseHealth(health);
+            block.setHealth(health);
         }
 
         Block[] topRow = blocks[0];
@@ -131,9 +128,6 @@ public class ProceduralTerrain {
         blocks[blocks.length - 1] = topRow;
     }
 
-    /**
-     * Renders the terrain blocks, activating or deactivating their physics bodies as needed.
-     */
     public void draw() {
         for (Block[] row : blocks) {
             for (Block block : row) {
@@ -152,13 +146,8 @@ public class ProceduralTerrain {
         }
     }
 
-    /**
-     * Determines if a block should be rendered based on cave noise and color.
-     * @param block The block to check.
-     * @return True if the block should render, false if it should be hidden.
-     */
     private boolean shouldRenderBlock(Block block) {
-        if (block.getColor() == null) {
+        if (block.getHealth() <= 0.0f) {
             return false;
         }
 
@@ -171,5 +160,21 @@ public class ProceduralTerrain {
         }
 
         return true;
+    }
+
+    public float getBlockOutlineWidth() {
+        return blockOutlineWidth;
+    }
+
+    public float getDepth() {
+        return depth;
+    }
+
+    public Block[][] getBlocks() {
+        return blocks;
+    }
+
+    public float getBlockSize() {
+        return blockSize;
     }
 }

@@ -6,95 +6,97 @@ import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 
 public class Block {
-    // Block data
     private final Body body;    // Physics body of the block
     private final float size;   // Block size in meters
     private Color color;        // Block color
+    private float health;
 
-    /**
-     * Constructs a Block at the specified position, with a given size and color.
-     * @param posX X-coordinate of the top-left corner of the block.
-     * @param posY Y-coordinate of the top-left corner of the block.
-     * @param size Size of the block in meters.
-     * @param color Color of the block.
-     */
-    public Block(float posX, float posY, float size, Color color) {
+    private float currentHealth;
+
+    public Block(float x, float y, float size, Color color, float health) {
         this.size = size;
         this.color = color;
-        this.body = createBlockBody(posX, posY, size);
+        this.body = createBlockBody(x, y, size);
+        this.health = health;
         this.body.setUserData(this); // Attach this instance to the body’s user data for reference.
+        this.currentHealth = health;
     }
 
-    /**
-     * Draws the block with an optional outline width.
-     * @param outlineWidth Width of the outline around the block.
-     */
-    public void draw(float outlineWidth) {
-        // Set color for block
-        Main.shapeRenderer.setColor(color);
+    private Body createBlockBody(float x, float y, float size) {
+        return Box2DUtils.createBoxBody(
+            Main.physicsWorld, BodyDef.BodyType.StaticBody,
+            new Vector2(x + size / 2, y - size / 2),
+            size, size, 0.0f, 0.25f, 0.0f
+        );
+    }
 
-        // Calculate position with outline
+    public void draw(float outlineWidth) {
+        // Dynamically determine the number of steps based on health, with a minimum of 2 steps
+        int steps = Math.max(2, (int) Math.ceil(health / 5.0)); // Divide health by 5 and round up, with a minimum of 2 steps
+        float stepSize = 1.0f / steps; // Step size for darkness factor
+
+        // Calculate the discrete darkness factor
+        float rawFactor = Math.max(0, Math.min(1, Math.round(currentHealth / health / stepSize) * stepSize)); // Clamp between 0 and 1, snapping to stepSize
+        float darknessFactor = 0.5f + rawFactor * 0.5f; // Remap [0, 1] to [0.5, 1]
+
+        // Adjust color based on darknessFactor
+        Color adjustedColor = new Color(
+            color.r * darknessFactor,
+            color.g * darknessFactor,
+            color.b * darknessFactor,
+            color.a
+        );
+
+        Main.shapeRenderer.setColor(adjustedColor);
+
+        // Draw the rectangle
         Vector2 position = getPosition();
         float x = position.x + outlineWidth;
-        float y = position.y + outlineWidth;
+        float y = position.y - outlineWidth;
 
-        // Draw block rectangle with specified outline
         Main.shapeRenderer.rect(x, y, size - outlineWidth * 2, -size + outlineWidth * 2);
     }
 
-    /**
-     * Retrieves the physics body of the block.
-     * @return The physics body.
-     */
+
+
     public Body getBody() {
         return body;
     }
 
-    /**
-     * Returns the position of the block's top-left corner in world coordinates.
-     * @return The top-left position of the block.
-     */
     public Vector2 getPosition() {
         return body.getPosition().add(-size / 2, size / 2);
     }
 
-    /**
-     * Sets the position of the block's top-left corner in world coordinates.
-     * @param posX X-coordinate of the top-left corner.
-     * @param posY Y-coordinate of the top-left corner.
-     */
-    public void setPosition(float posX, float posY) {
-        body.setTransform(posX + size / 2, posY - size / 2, body.getAngle());
+    public void setPosition(float x, float y) {
+        body.setTransform(x + size / 2, y - size / 2, body.getAngle());
     }
 
-    /**
-     * Retrieves the color of the block.
-     * @return The current color of the block.
-     */
     public Color getColor() {
         return color;
     }
 
-    /**
-     * Sets the color of the block.
-     * @param color New color for the block.
-     */
     public void setColor(Color color) {
         this.color = color;
     }
 
-    /**
-     * Creates a static body for the block in the physics world.
-     * @param posX X-coordinate of the top-left corner.
-     * @param posY Y-coordinate of the top-left corner.
-     * @param size Size of the block in meters.
-     * @return The created physics body.
-     */
-    private Body createBlockBody(float posX, float posY, float size) {
-        return Box2DUtils.createBody(
-            Main.physicsWorld, BodyDef.BodyType.StaticBody,
-            new Vector2(posX + size / 2, posY - size / 2),
-            size, size, 0.0f, 1.0f, 0.2f
-        );
+    public float getSize() {
+        return size;
     }
+
+    public void healthBy(float value) {
+        currentHealth += value;
+    }
+
+    public float getHealth() {
+        return currentHealth;
+    }
+
+    public void setHealth(float health) {
+        currentHealth = health;
+    }
+
+    public void setBaseHealth(float health) {
+        this.health = health;
+    }
+
 }

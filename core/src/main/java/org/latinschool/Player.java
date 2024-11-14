@@ -1,6 +1,7 @@
 package org.latinschool;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Graphics;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.Vector2;
@@ -11,115 +12,189 @@ public class Player {
     private final Body body;
     private final float width; // Meters
     private final float height; // Meters
-    private final float speed; // In meters
-    private final float maxVelocity = 5f;
-    private boolean isGrounded = true; // To track if the player is on the ground
+    private final float speed; // Max velocity
+    private final float acceleration; // Force applied to accelerate
+    private final float jumpForce; // Force applied to jump
+    private final float sprintMultiplier; // Speed and quickness multiplier for sprinting
+    // private final float sprintDuration; // Max time for sprinting
+    //private final float sprintCooldown; // Cooldown time for sprinting
+    private final float crouchMultiplier; // Speed and quickness multiplier for crouching
+    private final boolean useFollowCam; // Locking to main camera or not
 
-    public Player(float x, float y, float width, float height, float speed) {
+    private float mineSpeed = 10.0f;
+    private int blocksMined = 0;
+    private float lowestPoint = 1000;
+
+    private Block highlightedBlock;
+
+    public Player(float x, float y, float width, float height,
+                  float speed, float acceleration, float jumpForce, float sprintMultiplier,
+                  float sprintDuration, float sprintCooldown, float crouchMultiplier, boolean useFollowCam) {
+
         this.width = width;
         this.height = height;
         this.speed = speed;
+        this.acceleration = acceleration;
+        this.jumpForce = jumpForce;
+        this.sprintMultiplier = sprintMultiplier;
+        // this.sprintDuration = sprintDuration;
+        // this.sprintCooldown = sprintCooldown;
+        this.crouchMultiplier = crouchMultiplier;
+        this.useFollowCam = useFollowCam;
+        this.body = createPlayerBody(x, y);
+    }
 
-        // Create the player body
-        body = Box2DUtils.createBody(Main.physicsWorld, BodyDef.BodyType.DynamicBody, new Vector2(x, y), width, height, 1.0f, .5f, 0.0f);
-        body.setFixedRotation(true); // Prevents the body from rotating
+    private Body createPlayerBody(float x, float y) {
+        Body body = Box2DUtils.createCapsuleBody(
+            Main.physicsWorld, BodyDef.BodyType.DynamicBody, new Vector2(x, y),
+            width, height, 0.75f, 1.0f,
+            1.0f, 0.25f, 0.0f
+        );
+        createFootSensor(body);
+        body.setFixedRotation(true);
+
+        return body;
+    }
+
+    private void createFootSensor(Body body) {
+        PolygonShape footSensorShape = new PolygonShape();
+        footSensorShape.setAsBox(width * 0.4f, 0.05f, new Vector2(0, -height / 2), 0);
+
+        FixtureDef footSensorFixtureDef = new FixtureDef();
+        footSensorFixtureDef.shape = footSensorShape;
+        footSensorFixtureDef.isSensor = true;
+
+        body.createFixture(footSensorFixtureDef).setUserData("footSensor");
+        footSensorShape.dispose();
     }
 
     public void input() {
-        // Update grounded status
-        // isGrounded = checkIfGrounded();
+        boolean isSprinting = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT);
+        boolean isCrouching = Gdx.input.isKeyPressed(Input.Keys.C);
+        boolean isGrounded = Main.contactListener.isGrounded();
 
-        // Move player if grounded and within max speed limits
-        handleMovement();
+        float appliedAcceleration = applyMultiplier(acceleration, isSprinting, isCrouching, isGrounded);
+        float appliedSpeed = applyMultiplier(speed, isSprinting, isCrouching, isGrounded);
 
-        // Handle mining action (mouse click)
-        if (Gdx.input.isButtonJustPressed(Input.Buttons.LEFT)) {
-            mineBlock();
-        }
-    }
-
-    private void handleMovement() {
+        handleMovement(appliedAcceleration, isGrounded);
         if (isGrounded) {
-            // Move left or right within the speed limits
-            float velocityX = body.getLinearVelocity().x;
-            if (Gdx.input.isKeyPressed(Input.Keys.A) && velocityX > -maxVelocity) {
-                body.setLinearVelocity(new Vector2(-speed, body.getLinearVelocity().y));
-            } else if (Gdx.input.isKeyPressed(Input.Keys.D) && velocityX < maxVelocity) {
-                body.setLinearVelocity(new Vector2(speed, body.getLinearVelocity().y));
+            capVelocity(appliedSpeed);
+        }
+
+        updateHighlightedBlock(1.5f);
+
+        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT) && highlightedBlock != null) {
+            float by = -mineSpeed * Gdx.graphics.getDeltaTime();
+            if (highlightedBlock.getHealth() + by <= 0.0f) {
+                blocksMined += 1;
+                mineSpeed += 0.05f;
+                if (highlightedBlock.getColor().equals(Color.YELLOW)) {
+                    mineSpeed += 5.0f;
+                }
             }
+            highlightedBlock.healthBy(-mineSpeed * Gdx.graphics.getDeltaTime());
+        }
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) {
+            mineSpeed += 1;
         }
     }
 
-    private boolean checkIfGrounded() {
-        return true;
-        /**
-        float rayLength = 0.1f; // Small ray distance to check if grounded
-        Vector2 rayStart = body.getPosition();
-        Vector2 rayEnd = new Vector2(rayStart.x, rayStart.y - height / 2 - rayLength);
-
-        final boolean[] grounded = {false};
-
-        // Perform the raycast to check for ground
-        Main.physicsWorld.rayCast((fixture, point, normal, fraction) -> {
-            if (fixture.getBody() != body) { // Ignore the player's body
-                grounded[0] = true; // Hit something below, the player is grounded
-                return 0; // Terminate raycast
-            }
-            return 1; // Continue raycast
-        }, rayStart, rayEnd);
-
-        return grounded[0];
-         **/
+    private float applyMultiplier(float value, boolean isSprinting, boolean isCrouching, boolean isGrounded) {
+       if (isGrounded) {
+           if (isSprinting) {
+               return value * sprintMultiplier;
+           } else if (isCrouching) {
+               return value * crouchMultiplier;
+           }
+           return value;
+       }
+       return value * 0.1f;
     }
 
-    private void mineBlock() {
-        // Convert the mouse position to world coordinates
+    private void handleMovement(float quickness, boolean isGrounded) {
+        if (Gdx.input.isKeyPressed(Input.Keys.A)) {
+            body.applyForceToCenter(new Vector2(-quickness, 0), true);
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.D)) {
+            body.applyForceToCenter(new Vector2(quickness, 0), true);
+        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)  && isGrounded) {
+            body.applyLinearImpulse(new Vector2(0, jumpForce), body.getWorldCenter(), true);
+        }
+    }
+
+    private void capVelocity(float speed) {
+        Vector2 velocity = body.getLinearVelocity();
+        if (Math.abs(velocity.x) > speed) {
+            body.setLinearVelocity(speed * Math.signum(velocity.x), velocity.y);
+        }
+    }
+
+    private void updateHighlightedBlock(float maxLength) {
         Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
         Main.gameViewport.unproject(mousePos);
-        Vector2 clickedWorldPos = new Vector2(mousePos.x, mousePos.y);
+        Vector2 mouseWorldPos = new Vector2(mousePos.x, mousePos.y);
 
-        // Create a ray from player to the clicked position with a max distance of 1.5f
         Vector2 playerPos = body.getPosition();
-        Vector2 direction = clickedWorldPos.cpy().sub(playerPos).nor().scl(1.5f); // Limit to 1.5 meters
-        Vector2 rayEnd = playerPos.cpy().add(direction);
+        Vector2 direction = mouseWorldPos.cpy().sub(playerPos).nor();
 
-        final float[] closestFraction = {1.0f}; // Max fraction to track closest block
-        final Block[] firstHitBlock = {null}; // Block hit by the ray
+        float distanceToMouse = playerPos.dst(mouseWorldPos);
 
-        // Perform raycast to find the closest block
+        float effectiveLength = Math.min(maxLength, distanceToMouse);
+
+        Vector2 rayEnd = playerPos.cpy().add(direction.scl(effectiveLength));
+
+        final Block[] hitBlock = {null};
+        final float[] closestFraction = {1.0f};
+
         Main.physicsWorld.rayCast((fixture, point, normal, fraction) -> {
-            Object userData = fixture.getBody().getUserData();
-
-            if (userData instanceof Block && fraction < closestFraction[0]) {
-                closestFraction[0] = fraction; // Update closest hit fraction
-                firstHitBlock[0] = (Block) userData; // Capture the block hit
+            if (fixture.getBody() == body) {
+                return -1f; // Continue
             }
-            return 1; // Continue raycast
+            Object userData = fixture.getBody().getUserData();
+            if (userData instanceof Block) {
+                if (fraction < closestFraction[0]) {
+                    closestFraction[0] = fraction;
+                    hitBlock[0] = (Block) userData;
+                }
+            }
+
+            return 1f;
         }, playerPos, rayEnd);
 
-        // If a block was hit, mark it for destruction (by changing its color)
-        if (firstHitBlock[0] != null) {
-            firstHitBlock[0].setColor(null); // "Destroy" the block by clearing its color
-        }
+        highlightedBlock = hitBlock[0];
     }
 
     public void update() {
-        followCam();
+        if (useFollowCam) {
+            followCam();
+        }
     }
 
     private void followCam() {
-        // Keep the camera centered on the player's y-position
-        Main.mainCamera.position.y = body.getPosition().y;
-        Main.mainCamera.update();
+        if (body.getPosition().y < lowestPoint) {
+            Main.mainCamera.position.y = body.getPosition().y;
+            Main.mainCamera.update();
+            lowestPoint = body.getPosition().y;
+        }
     }
 
     public void draw() {
         // Draw player rectangle based on its position and size
         Vector2 bodyPosition = body.getPosition();
-        float x = bodyPosition.x - width / 2;
-        float y = bodyPosition.y - height / 2;
+        float xa = bodyPosition.x - width / 2;
+        float ya = bodyPosition.y - height / 2;
 
         Main.shapeRenderer.setColor(Color.TEAL);
-        Main.shapeRenderer.rect(x, y, width, height);
+        Main.shapeRenderer.rect(xa, ya, width, height);
+
+        if (highlightedBlock != null) {
+            highlightedBlock.draw(Main.terrain.getBlockOutlineWidth() * .625f);
+        }
+    }
+
+    public float getHeight() {
+        return height;
     }
 }
