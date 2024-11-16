@@ -190,7 +190,7 @@ public class Player {
         Main.shapeRenderer.rect(xa, ya, width, height);
 
         if (highlightedBlock != null) {
-            highlightedBlock.draw(Main.terrain.getBlockOutlineWidth() * .625f);
+            highlightedBlock.draw(Main.terrain.getBlockOutlineWidth() * .25f);
         }
     }
 

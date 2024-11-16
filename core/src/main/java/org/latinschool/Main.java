@@ -30,7 +30,10 @@ public class Main extends ApplicationAdapter {
     private static final Color BACKGROUND_COLOR = new Color(0.15f, 0.15f, 0.2f, 1f);
 
     private Player player;
+    private Enemy[] enemy;
     private Box2DDebugRenderer box2DDebugRenderer;
+
+    private Body bounds;
 
     private BitmapFont font;
     private SpriteBatch spriteBatch;
@@ -47,7 +50,55 @@ public class Main extends ApplicationAdapter {
         font.setColor(Color.WHITE);
         font.getData().setScale(2.0f); // Scale up the font size (2x)
         spriteBatch = new SpriteBatch();
+        enemy = new Enemy[10];
+        enemy[0] = new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
+        enemy[1] =new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
+        enemy[2] = new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
+        enemy[3] =new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
+        enemy[4] = new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
+        enemy[5] =new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
+
+
+        createBounds();
+       // Make bounds on left and right left with psotion of -10, 0 with width of 20 and height of 100 and rifht with position of camera.viweportwidth + 10 and y of 0 with width of 20 and height of 100
     }
+
+    private void createBounds() {
+        float boundWidth = 20.0f;
+        float boundHeight = 100.0f;
+
+        // Create left bound
+        createStaticBound(-10.0f, 0.0f, boundWidth, boundHeight);
+
+        // Create right bound
+        createStaticBound(gameViewport.getWorldWidth() + 10.0f, 0.0f, boundWidth, boundHeight);
+    }
+
+    private void createStaticBound(float x, float y, float width, float height) {
+        // Define body
+        BodyDef bodyDef = new BodyDef();
+        bodyDef.position.set(x, y);
+        bodyDef.type = BodyDef.BodyType.StaticBody;
+
+        bounds = physicsWorld.createBody(bodyDef);
+
+        // Define shape
+        PolygonShape shape = new PolygonShape();
+        shape.setAsBox(width / 2, height / 2); // Box centered on the body position
+
+        // Define fixture
+        FixtureDef fixtureDef = new FixtureDef();
+        fixtureDef.shape = shape;
+        fixtureDef.density = 1.0f;
+        fixtureDef.friction = 0.0f;
+        fixtureDef.restitution = 1.0f; // No bounce
+
+        bounds.createFixture(fixtureDef);
+
+        // Clean up shape
+        shape.dispose();
+    }
+
 
     private void initGlobals() {
         mainCamera = new OrthographicCamera();
@@ -105,6 +156,7 @@ public class Main extends ApplicationAdapter {
 
     private void logic() {
         terrain.update();
+        bounds.getPosition().set(bounds.getPosition().x, mainCamera.position.y);
         player.update();
     }
 
@@ -120,6 +172,12 @@ public class Main extends ApplicationAdapter {
 
         terrain.draw();
         player.draw();
+        enemy[0].render();
+        enemy[1].render();
+        enemy[2].render();
+        enemy[3].render();
+        enemy[4].render();
+        enemy[5].render();
 
         shapeRenderer.end();
 
