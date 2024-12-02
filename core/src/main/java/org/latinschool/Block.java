@@ -6,69 +6,55 @@ import com.badlogic.gdx.physics.box2d.Body;
 import com.badlogic.gdx.physics.box2d.BodyDef;
 
 public class Block {
-    private final Body body;    // Physics body of the block
-    private final float size;   // Block size in meters
-    private Color color;        // Block color
+    private final Body body;
+    private Color color;
+    private float size;
+    private float baseHealth;
     private float health;
 
-    private float currentHealth;
-
-    public Block(float x, float y, float size, Color color, float health) {
-        this.size = size;
+    public Block(Vector2 position, Color color, float size, float health) {
+        this.body = Box2DUtils.createBoxBody(Main.physicsWorld, position, size, size,
+            BodyDef.BodyType.StaticBody, 0.0f, 0.25f, 0.0f);
+        this.body.setUserData(this);
         this.color = color;
-        this.body = createBlockBody(x, y, size);
+        this.size = size;
+        this.baseHealth = health;
         this.health = health;
-        this.body.setUserData(this); // Attach this instance to the body’s user data for reference.
-        this.currentHealth = health;
     }
 
-    private Body createBlockBody(float x, float y, float size) {
-        return Box2DUtils.createBoxBody(
-            Main.physicsWorld, BodyDef.BodyType.StaticBody,
-            new Vector2(x + size / 2, y - size / 2),
-            size, size, 0.0f, 0.25f, 0.0f
-        );
-    }
 
     public void draw(float outlineWidth) {
-        // Dynamically determine the number of steps based on health, with a minimum of 2 steps
-        int steps = Math.max(2, (int) Math.ceil(health / 5.0)); // Divide health by 5 and round up, with a minimum of 2 steps
-        float stepSize = 1.0f / steps; // Step size for darkness factor
+        draw(outlineWidth, color, 4);
+    }
 
-        // Calculate the discrete darkness factor
-        float rawFactor = Math.max(0, Math.min(1, Math.round(currentHealth / health / stepSize) * stepSize)); // Clamp between 0 and 1, snapping to stepSize
-        float darknessFactor = 0.5f + rawFactor * 0.5f; // Remap [0, 1] to [0.5, 1]
+    public void draw(float outlineWidth, Color color, int steps) {
+        float halfSize = size / 2;
+        Vector2 position = body.getPosition();
+        float x = position.x - halfSize + outlineWidth;
+        float y = position.y + halfSize - outlineWidth;
 
-        // Adjust color based on darknessFactor
-        Color adjustedColor = new Color(
-            color.r * darknessFactor,
-            color.g * darknessFactor,
-            color.b * darknessFactor,
-            color.a
-        );
-
-        Main.shapeRenderer.setColor(adjustedColor);
-
-        // Draw the rectangle
-        Vector2 position = getPosition();
-        float x = position.x + outlineWidth;
-        float y = position.y - outlineWidth;
-
+        Main.shapeRenderer.setColor(getAdjustedColor(color, steps));
         Main.shapeRenderer.rect(x, y, size - outlineWidth * 2, -size + outlineWidth * 2);
     }
 
-
+    private Color getAdjustedColor(Color originalColor, int steps) {
+        if (steps == 0) { return originalColor; }
+        float stepSize = 1.0f / steps;
+        float rawFactor = Math.max(0, Math.min(1, Math.round(health / baseHealth / stepSize) * stepSize));
+        float darknessFactor = 0.5f + rawFactor * 0.5f;
+        return new Color(originalColor.r * darknessFactor, originalColor.g * darknessFactor, originalColor.b * darknessFactor, originalColor.a);
+    }
 
     public Body getBody() {
         return body;
     }
 
     public Vector2 getPosition() {
-        return body.getPosition().add(-size / 2, size / 2);
+        return body.getPosition();
     }
 
     public void setPosition(float x, float y) {
-        body.setTransform(x + size / 2, y - size / 2, body.getAngle());
+        body.setTransform(x, y, body.getAngle());
     }
 
     public Color getColor() {
@@ -79,24 +65,24 @@ public class Block {
         this.color = color;
     }
 
-    public float getSize() {
-        return size;
+    public float getBaseHealth() {
+        return baseHealth;
     }
 
-    public void healthBy(float value) {
-        currentHealth += value;
+    public void setBaseHealth(float baseHealth) {
+        this.baseHealth = baseHealth;
+        this.health = baseHealth;
     }
 
     public float getHealth() {
-        return currentHealth;
+        return health;
     }
 
-    public void setHealth(float health) {
-        currentHealth = health;
+    public void healthBy(float by) {
+        health += by;
     }
 
-    public void setBaseHealth(float health) {
-        this.health = health;
+    public float getSize() {
+        return size;
     }
-
 }

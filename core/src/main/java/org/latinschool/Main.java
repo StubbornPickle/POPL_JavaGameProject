@@ -1,131 +1,86 @@
 package org.latinschool;
 
 import com.badlogic.gdx.ApplicationAdapter;
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Camera;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.physics.box2d.*;
-import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
 import java.util.Random;
 
 public class Main extends ApplicationAdapter {
-    public static Camera mainCamera;
-    public static Viewport gameViewport;
-    public static World physicsWorld;
+    public static Camera camera;
+    public static Viewport viewport;
     public static ProceduralTerrain terrain;
-    public static GlobalContactListener contactListener;
     public static ShapeRenderer shapeRenderer;
+    public static World physicsWorld;
+    public static Player player;
 
-    private static final float WORLD_WIDTH = 10.0f;
-    private static final float WORLD_HEIGHT = 10.0f;
-    private static final Vector2 GRAVITY = new Vector2(0.0f, -9.8f);
-    private static final Color BACKGROUND_COLOR = new Color(0.15f, 0.15f, 0.2f, 1f);
-
-    private Player player;
-    private Enemy[] enemy;
     private Box2DDebugRenderer box2DDebugRenderer;
-
     private Body bounds;
-
-    private BitmapFont font;
-    private SpriteBatch spriteBatch;
 
     @Override
     public void create() {
         initGlobals();
-        initPlayer();
-
-        box2DDebugRenderer = new Box2DDebugRenderer();
-
-        // Initialize font and sprite batch for HUD
-        font = new BitmapFont(); // Default font
-        font.setColor(Color.WHITE);
-        font.getData().setScale(2.0f); // Scale up the font size (2x)
-        spriteBatch = new SpriteBatch();
-        enemy = new Enemy[10];
-        enemy[0] = new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
-        enemy[1] =new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
-        enemy[2] = new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
-        enemy[3] =new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
-        enemy[4] = new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
-        enemy[5] =new Enemy(WORLD_WIDTH / 2, WORLD_HEIGHT * .6f, 0.25f);
-
-
         createBounds();
-       // Make bounds on left and right left with psotion of -10, 0 with width of 20 and height of 100 and rifht with position of camera.viweportwidth + 10 and y of 0 with width of 20 and height of 100
+    }
+
+    private void initGlobals() {
+        initRendering(10.0f, 10.0f);
+        initPhysics();
+        initTerrain();
+        initPlayer();
+    }
+
+    private void initRendering(float worldWidth, float worldHeight) {
+        camera = new OrthographicCamera();
+        camera.position.set(worldWidth / 2, worldHeight / 2, 0);
+        camera.update();
+
+        viewport = new FitViewport(worldWidth, worldHeight, camera);
+        viewport.apply();
+
+        shapeRenderer = new ShapeRenderer();
+    }
+
+    private void initPhysics() {
+        physicsWorld = new World(new Vector2(0.0f, -9.8f), true);
+        box2DDebugRenderer = new Box2DDebugRenderer();
     }
 
     private void createBounds() {
-        float boundWidth = 20.0f;
-        float boundHeight = 100.0f;
-
-        // Create left bound
-        createStaticBound(-10.0f, 0.0f, boundWidth, boundHeight);
-
-        // Create right bound
-        createStaticBound(gameViewport.getWorldWidth() + 10.0f, 0.0f, boundWidth, boundHeight);
-    }
-
-    private void createStaticBound(float x, float y, float width, float height) {
-        // Define body
-        BodyDef bodyDef = new BodyDef();
-        bodyDef.position.set(x, y);
-        bodyDef.type = BodyDef.BodyType.StaticBody;
-
+        BodyDef bodyDef = Box2DUtils.createBodyDef(new Vector2(camera.position.x, camera.position.y), BodyDef.BodyType.StaticBody);
         bounds = physicsWorld.createBody(bodyDef);
 
-        // Define shape
-        PolygonShape shape = new PolygonShape();
-        shape.setAsBox(width / 2, height / 2); // Box centered on the body position
+        float halfWidth = camera.viewportWidth / 2;
 
-        // Define fixture
-        FixtureDef fixtureDef = new FixtureDef();
-        fixtureDef.shape = shape;
-        fixtureDef.density = 1.0f;
-        fixtureDef.friction = 0.0f;
-        fixtureDef.restitution = 1.0f; // No bounce
-
-        bounds.createFixture(fixtureDef);
-
-        // Clean up shape
-        shape.dispose();
+        createBoundFixture(-halfWidth - 10.0f, 0.0f, 20.0f, camera.viewportHeight * 2); // Left
+        createBoundFixture(halfWidth + 10.0f, 0.0f, 20.0f, camera.viewportHeight * 2); // Right
+        createBoundFixture(0.0f, -halfWidth - 10.0f, camera.viewportWidth * 2, 20.0f); // Bottom
+        createBoundFixture(0.0f, halfWidth + 10.0f, camera.viewportWidth * 2, 20.0f); // Top
     }
 
+    private void createBoundFixture(float x, float y, float width, float height) {
+        PolygonShape shape = Box2DUtils.createRectangleShape(width, height, new Vector2(x, y), 0.0f);
+        FixtureDef fixtureDef = Box2DUtils.createFixtureDef(shape, 0.0f, 0.0f, 0.0f);
+        bounds.createFixture(fixtureDef);
 
-    private void initGlobals() {
-        mainCamera = new OrthographicCamera();
-        mainCamera.position.set(WORLD_WIDTH / 2, WORLD_HEIGHT / 2, 0);
-        mainCamera.update();
-
-        gameViewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, mainCamera);
-        gameViewport.apply();
-
-        physicsWorld = new World(GRAVITY, false);
-        contactListener = new GlobalContactListener();
-        physicsWorld.setContactListener(contactListener);
-
-        shapeRenderer = new ShapeRenderer();
-
-        initTerrain();
+        shape.dispose();
     }
 
     private void initTerrain() {
         terrain = new ProceduralTerrain(
-            WORLD_HEIGHT / 2,
+            new Vector2(0, camera.position.y),
             15,
             0.025f,
-            new Color[]{Color.GREEN, Color.BROWN, Color.GRAY, Color.DARK_GRAY},
-            new float[]{10.0f, 10.0f, 20.0f, 40.0f},
-            new int[]{0, 1, 10, 25},
-            new Color[]{Color.GRAY, Color.DARK_GRAY},
+            new Color[]{Color.GREEN, Color.BROWN, Color.GRAY, Color.DARK_GRAY}, // Layers
+            new int[]{0, 1, 5, 20}, // Layer thresholds
+            new float[]{10.0f, 10.0f, 25.0f, 50.0f}, // Layer healths
+            new Color[]{Color.GRAY, Color.DARK_GRAY}, // Cave layers
             0.5f,
             0.1f,
             new Random().nextLong()
@@ -133,21 +88,19 @@ public class Main extends ApplicationAdapter {
     }
 
     private void initPlayer() {
-        player = new Player(WORLD_WIDTH / 2, WORLD_HEIGHT * 0.9f,
+        player = new Player(
+            new Vector2(camera.viewportWidth / 2, camera.viewportHeight * 0.9f),
             0.225f, 0.91f, 1.5f, 2.0f, 1.0f,
-            1.5f, 3.0f, 1.5f, 0.5f,
-            true);
+            1.5f, 0.5f,
+            true, 10.0f, 10.0f
+        );
     }
 
     @Override
     public void render() {
-        gameViewport.apply();
-        physicsWorld.step(Gdx.graphics.getDeltaTime(), 6, 2);
-
         input();
         logic();
         draw();
-        drawHUD();
     }
 
     private void input() {
@@ -155,56 +108,41 @@ public class Main extends ApplicationAdapter {
     }
 
     private void logic() {
+        viewport.apply();
+        physicsWorld.step(1f / 60, 6, 2);
         terrain.update();
-        bounds.getPosition().set(bounds.getPosition().x, mainCamera.position.y);
         player.update();
+        bounds.setTransform(bounds.getPosition().x, camera.position.y, bounds.getAngle());
     }
 
     private void draw() {
-        ScreenUtils.clear(Color.BLACK);
-
-        shapeRenderer.setProjectionMatrix(mainCamera.combined);
+        shapeRenderer.setProjectionMatrix(camera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        // Viewport background
-        shapeRenderer.setColor(BACKGROUND_COLOR);
-        shapeRenderer.rect(0, mainCamera.position.y - mainCamera.viewportHeight / 2, WORLD_WIDTH, WORLD_HEIGHT);
-
+        clearViewport(new Color(0.15f, 0.15f, 0.2f, 1f));
         terrain.draw();
         player.draw();
-        enemy[0].render();
-        enemy[1].render();
-        enemy[2].render();
-        enemy[3].render();
-        enemy[4].render();
-        enemy[5].render();
-
         shapeRenderer.end();
-
-        // box2DDebugRenderer.render(physicsWorld, mainCamera.combined);
     }
 
-    private void drawHUD() {
-        spriteBatch.begin(); // Ensure spriteBatch has been started
 
-        CharSequence charSequence = String.valueOf("Depth: " + -Math.round(((WORLD_HEIGHT / 2) - (mainCamera.position.y - player.getHeight() / 2)) / terrain.getBlockSize()));
-
-        font.draw(spriteBatch, charSequence, 10, 480 - 10);
-
-        spriteBatch.end(); // End spriteBatch rendering
-
+    private void clearViewport(Color color) {
+        float halfWidth = camera.viewportWidth / 2;
+        float halfHeight = camera.viewportHeight / 2;
+        float x = camera.position.x - halfWidth;
+        float y = camera.position.y - halfHeight;
+        shapeRenderer.setColor(color);
+        shapeRenderer.rect(x, y, camera.viewportWidth, camera.viewportHeight);
     }
 
     @Override
     public void resize(int width, int height) {
-        gameViewport.update(width, height, true);
+        viewport.update(width, height);
     }
 
     @Override
     public void dispose() {
-        physicsWorld.dispose();
         shapeRenderer.dispose();
-        font.dispose();
-        spriteBatch.dispose();
+        physicsWorld.dispose();
     }
 }

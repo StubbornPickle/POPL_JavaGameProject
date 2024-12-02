@@ -1,7 +1,6 @@
 package org.latinschool;
 
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Graphics;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.Vector2;
@@ -10,68 +9,52 @@ import com.badlogic.gdx.physics.box2d.*;
 
 public class Player {
     private final Body body;
-    private final float width; // Meters
-    private final float height; // Meters
-    private final float speed; // Max velocity
-    private final float acceleration; // Force applied to accelerate
-    private final float jumpForce; // Force applied to jump
-    private final float sprintMultiplier; // Speed and quickness multiplier for sprinting
-    // private final float sprintDuration; // Max time for sprinting
-    //private final float sprintCooldown; // Cooldown time for sprinting
-    private final float crouchMultiplier; // Speed and quickness multiplier for crouching
-    private final boolean useFollowCam; // Locking to main camera or not
+    private final float width;
+    private final float height;
+    private final float speed;
+    private final float acceleration;
+    private final float jumpForce;
+    private final float sprintMultiplier;
+    private final float crouchMultiplier;
+    private final boolean useFollowCam;
+    private float baseHealth;
+    private float health;
 
-    private float mineSpeed = 10.0f;
-    private int blocksMined = 0;
-    private float lowestPoint = 1000;
+    private float mineSpeed;
+    private float lastYVelocity = 0.0f;
+    private boolean isGrounded = false;
+    private Block targetedBlock;
 
-    private Block highlightedBlock;
-
-    public Player(float x, float y, float width, float height,
-                  float speed, float acceleration, float jumpForce, float sprintMultiplier,
-                  float sprintDuration, float sprintCooldown, float crouchMultiplier, boolean useFollowCam) {
-
+    public Player(Vector2 position, float width, float height, float speed, float acceleration,
+                  float jumpForce, float sprintMultiplier, float crouchMultiplier, boolean useFollowCam,
+                  float mineSpeed, float baseHealth) {
         this.width = width;
         this.height = height;
         this.speed = speed;
         this.acceleration = acceleration;
         this.jumpForce = jumpForce;
         this.sprintMultiplier = sprintMultiplier;
-        // this.sprintDuration = sprintDuration;
-        // this.sprintCooldown = sprintCooldown;
         this.crouchMultiplier = crouchMultiplier;
         this.useFollowCam = useFollowCam;
-        this.body = createPlayerBody(x, y);
+        this.mineSpeed = mineSpeed;
+        this.baseHealth = baseHealth;
+        this.health = baseHealth;
+        this.body = createPlayerBody(position);
     }
 
-    private Body createPlayerBody(float x, float y) {
-        Body body = Box2DUtils.createCapsuleBody(
-            Main.physicsWorld, BodyDef.BodyType.DynamicBody, new Vector2(x, y),
-            width, height, 0.75f, 1.0f,
-            1.0f, 0.25f, 0.0f
-        );
-        createFootSensor(body);
+    private Body createPlayerBody(Vector2 position) {
+        Body body = Box2DUtils.createCapsuleBody(Main.physicsWorld, BodyDef.BodyType.DynamicBody, position, width, height,
+            0.75f, 1.0f, 1.0f, 0.25f, 0.0f);
+        body.setUserData(this);
         body.setFixedRotation(true);
+        body.setSleepingAllowed(false);
 
         return body;
-    }
-
-    private void createFootSensor(Body body) {
-        PolygonShape footSensorShape = new PolygonShape();
-        footSensorShape.setAsBox(width * 0.4f, 0.05f, new Vector2(0, -height / 2), 0);
-
-        FixtureDef footSensorFixtureDef = new FixtureDef();
-        footSensorFixtureDef.shape = footSensorShape;
-        footSensorFixtureDef.isSensor = true;
-
-        body.createFixture(footSensorFixtureDef).setUserData("footSensor");
-        footSensorShape.dispose();
     }
 
     public void input() {
         boolean isSprinting = Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT);
         boolean isCrouching = Gdx.input.isKeyPressed(Input.Keys.C);
-        boolean isGrounded = Main.contactListener.isGrounded();
 
         float appliedAcceleration = applyMultiplier(acceleration, isSprinting, isCrouching, isGrounded);
         float appliedSpeed = applyMultiplier(speed, isSprinting, isCrouching, isGrounded);
@@ -81,43 +64,41 @@ public class Player {
             capVelocity(appliedSpeed);
         }
 
-        updateHighlightedBlock(1.5f);
-
-        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT) && highlightedBlock != null) {
-            float by = -mineSpeed * Gdx.graphics.getDeltaTime();
-            if (highlightedBlock.getHealth() + by <= 0.0f) {
-                blocksMined += 1;
-                mineSpeed += 0.05f;
-                if (highlightedBlock.getColor().equals(Color.YELLOW)) {
+        if (health <= 0.0f) {
+            targetedBlock = null;
+        } else {
+            targetedBlock = getTargetedBlock(1.5f);
+        }
+        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT) && targetedBlock != null) {
+            targetedBlock.healthBy(-mineSpeed * Gdx.graphics.getDeltaTime());
+            if (targetedBlock.getHealth() <= 0.0f) {
+                if (targetedBlock.getColor().equals(Color.YELLOW)) {
                     mineSpeed += 5.0f;
+                } else {
+                    mineSpeed += targetedBlock.getBaseHealth() / 10.0f;
                 }
             }
-            highlightedBlock.healthBy(-mineSpeed * Gdx.graphics.getDeltaTime());
-        }
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) {
-            mineSpeed += 1;
         }
     }
 
     private float applyMultiplier(float value, boolean isSprinting, boolean isCrouching, boolean isGrounded) {
-       if (isGrounded) {
-           if (isSprinting) {
-               return value * sprintMultiplier;
-           } else if (isCrouching) {
-               return value * crouchMultiplier;
-           }
-           return value;
-       }
-       return value * 0.1f;
+        if (isGrounded) {
+            if (isSprinting) {
+                return value * sprintMultiplier;
+            } else if (isCrouching) {
+                return value * crouchMultiplier;
+            }
+            return value;
+        }
+        return value * 0.1f;
     }
 
-    private void handleMovement(float quickness, boolean isGrounded) {
+    private void handleMovement(float acceleration, boolean isGrounded) {
         if (Gdx.input.isKeyPressed(Input.Keys.A)) {
-            body.applyForceToCenter(new Vector2(-quickness, 0), true);
+            body.applyForceToCenter(new Vector2(-acceleration, 0), true);
         }
         if (Gdx.input.isKeyPressed(Input.Keys.D)) {
-            body.applyForceToCenter(new Vector2(quickness, 0), true);
+            body.applyForceToCenter(new Vector2(acceleration, 0), true);
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)  && isGrounded) {
             body.applyLinearImpulse(new Vector2(0, jumpForce), body.getWorldCenter(), true);
@@ -131,26 +112,31 @@ public class Player {
         }
     }
 
-    private void updateHighlightedBlock(float maxLength) {
-        Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
-        Main.gameViewport.unproject(mousePos);
-        Vector2 mouseWorldPos = new Vector2(mousePos.x, mousePos.y);
-
+    private Block getTargetedBlock(float maxDistance) {
         Vector2 playerPos = body.getPosition();
-        Vector2 direction = mouseWorldPos.cpy().sub(playerPos).nor();
+        Vector2 mouseWorldPos = getMouseWorldPosition();
+        return performRayCast(playerPos, calculateRayEnd(playerPos, mouseWorldPos, maxDistance));
+    }
 
-        float distanceToMouse = playerPos.dst(mouseWorldPos);
+    private Vector2 getMouseWorldPosition() {
+        Vector3 mousePos = new Vector3(Gdx.input.getX(), Gdx.input.getY(), 0);
+        Main.viewport.unproject(mousePos);
+        return new Vector2(mousePos.x, mousePos.y);
+    }
 
-        float effectiveLength = Math.min(maxLength, distanceToMouse);
+    private Vector2 calculateRayEnd(Vector2 p1, Vector2 p2, float maxDistance) {
+        Vector2 direction = p2.cpy().sub(p1).nor();
+        float effectiveLength = Math.min(maxDistance, p1.dst(p2));
+        return p1.cpy().add(direction.scl(effectiveLength));
+    }
 
-        Vector2 rayEnd = playerPos.cpy().add(direction.scl(effectiveLength));
-
+    private Block performRayCast(Vector2 start, Vector2 end) {
         final Block[] hitBlock = {null};
         final float[] closestFraction = {1.0f};
 
         Main.physicsWorld.rayCast((fixture, point, normal, fraction) -> {
             if (fixture.getBody() == body) {
-                return -1f; // Continue
+                return -1.0f;
             }
             Object userData = fixture.getBody().getUserData();
             if (userData instanceof Block) {
@@ -159,42 +145,72 @@ public class Player {
                     hitBlock[0] = (Block) userData;
                 }
             }
+            return 1.0f;
+        }, start, end);
 
-            return 1f;
-        }, playerPos, rayEnd);
-
-        highlightedBlock = hitBlock[0];
+        return hitBlock[0];
     }
 
     public void update() {
+        if (health <= 0.0f) {
+            body.setActive(false);
+        }
         if (useFollowCam) {
             followCam();
         }
+
+        float curYVelocity = body.getLinearVelocity().y;
+        isGrounded = false;
+        if (Math.abs(curYVelocity) < 0.01f && lastYVelocity <= 0) {
+            isGrounded = true;
+            if (lastYVelocity < -10.0f) {
+                health += lastYVelocity;
+            }
+        }
+        lastYVelocity = curYVelocity;
     }
 
+
     private void followCam() {
-        if (body.getPosition().y < lowestPoint) {
-            Main.mainCamera.position.y = body.getPosition().y;
-            Main.mainCamera.update();
-            lowestPoint = body.getPosition().y;
+        if (Main.camera.position.y > body.getPosition().y) {
+            Main.camera.position.y = body.getPosition().y;
+            Main.camera.update();
         }
     }
 
     public void draw() {
-        // Draw player rectangle based on its position and size
-        Vector2 bodyPosition = body.getPosition();
-        float xa = bodyPosition.x - width / 2;
-        float ya = bodyPosition.y - height / 2;
-
-        Main.shapeRenderer.setColor(Color.TEAL);
-        Main.shapeRenderer.rect(xa, ya, width, height);
-
-        if (highlightedBlock != null) {
-            highlightedBlock.draw(Main.terrain.getBlockOutlineWidth() * .25f);
+        drawPlayer();
+        if (targetedBlock != null && targetedBlock.getColor() != null) {
+            outlineTargetedBlock();
         }
     }
 
-    public float getHeight() {
-        return height;
+    private void drawPlayer() {
+        Vector2 position = body.getPosition();
+        float x = position.x - width / 2;
+        float y = position.y - height / 2;
+
+        Main.shapeRenderer.setColor(getAdjustedColor(Color.TEAL, 20));
+        Main.shapeRenderer.rect(x, y, width, height);
+    }
+
+    private Color getAdjustedColor(Color originalColor, int steps) {
+        float stepSize = 1.0f / steps;
+        float darknessFactor = Math.max(0, Math.min(1, Math.round(health / baseHealth / stepSize) * stepSize));
+        return new Color(originalColor.r * darknessFactor, originalColor.g * darknessFactor, originalColor.b * darknessFactor, originalColor.a);
+    }
+
+    private void outlineTargetedBlock() {
+        float outlineWidth = Main.terrain.getOutlineWidth();
+        targetedBlock.draw(outlineWidth, Color.WHITE, 0);
+        targetedBlock.draw(outlineWidth * 2.0f);
+    }
+
+    public boolean isGrounded() {
+        return isGrounded;
+    }
+
+    public float getHeath() {
+        return health;
     }
 }
